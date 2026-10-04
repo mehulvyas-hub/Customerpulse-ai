@@ -1,0 +1,152 @@
+CREATE OR REPLACE VIEW CUSTOMERPULSE_DB.APP.CUSTOMER_360_V AS
+
+SELECT
+    c.CUSTOMER_ID,
+    c.FULL_NAME,
+    c.CITY,
+    c.SEGMENT,
+    c.JOIN_DATE,
+
+    COALESCE(t.TXN_COUNT, 0) AS TOTAL_TRANSACTIONS,
+
+    COALESCE(t.TXN_30D, 0) AS TRANSACTIONS_LAST_30D,
+
+    COALESCE(t.TOTAL_SPEND, 0) AS TOTAL_SPEND,
+
+    COALESCE(cp.COMPLAINT_COUNT_60D, 0)
+        AS COMPLAINTS_LAST_60D,
+
+    COALESCE(cp.OPEN_COMPLAINTS, 0)
+        AS OPEN_COMPLAINTS,
+
+    COALESCE(l.DAYS_PAST_DUE, 0)
+        AS DAYS_PAST_DUE,
+
+    COALESCE(l.PAYMENT_STATUS, 'NO_LOAN')
+        AS PAYMENT_STATUS,
+
+    ca.CALL_DATE
+        AS LAST_CALL_DATE,
+
+    ca.TRANSCRIPT
+        AS LAST_CALL_TRANSCRIPT,
+
+    ca.SENTIMENT
+        AS LAST_CALL_SENTIMENT
+
+FROM CUSTOMERPULSE_DB.APP.CUSTOMERS c
+
+LEFT JOIN (
+
+    SELECT
+        CUSTOMER_ID,
+
+        COUNT(*) AS TXN_COUNT,
+
+        SUM(
+            IFF(
+                TXN_DATE >= DATEADD(
+                    DAY,
+                    -30,
+                    CURRENT_DATE()
+                ),
+                1,
+                0
+            )
+        ) AS TXN_30D,
+
+        SUM(
+            IFF(
+                STATUS = 'SUCCESS',
+                AMOUNT,
+                0
+            )
+        ) AS TOTAL_SPEND
+
+    FROM CUSTOMERPULSE_DB.APP.TRANSACTIONS
+
+    GROUP BY CUSTOMER_ID
+
+) t
+
+ON c.CUSTOMER_ID = t.CUSTOMER_ID
+
+
+LEFT JOIN (
+
+    SELECT
+        CUSTOMER_ID,
+
+        COUNT_IF(
+            CREATED_AT >= DATEADD(
+                DAY,
+                -60,
+                CURRENT_DATE()
+            )
+        ) AS COMPLAINT_COUNT_60D,
+
+        COUNT_IF(
+            STATUS = 'OPEN'
+        ) AS OPEN_COMPLAINTS
+
+    FROM CUSTOMERPULSE_DB.APP.COMPLAINTS
+
+    GROUP BY CUSTOMER_ID
+
+) cp
+
+ON c.CUSTOMER_ID = cp.CUSTOMER_ID
+
+
+LEFT JOIN (
+
+    SELECT
+        CUSTOMER_ID,
+        DAYS_PAST_DUE,
+        PAYMENT_STATUS
+
+    FROM CUSTOMERPULSE_DB.APP.LOANS
+
+    QUALIFY ROW_NUMBER() OVER (
+        PARTITION BY CUSTOMER_ID
+        ORDER BY DAYS_PAST_DUE DESC
+    ) = 1
+
+) l
+
+ON c.CUSTOMER_ID = l.CUSTOMER_ID
+
+
+LEFT JOIN (
+
+    SELECT
+        CUSTOMER_ID,
+        CALL_DATE,
+        TRANSCRIPT,
+        SENTIMENT
+
+    FROM CUSTOMERPULSE_DB.APP.CALL_ANALYSIS
+
+    QUALIFY ROW_NUMBER() OVER (
+        PARTITION BY CUSTOMER_ID
+        ORDER BY CALL_DATE DESC
+    ) = 1
+
+) ca
+
+ON c.CUSTOMER_ID = ca.CUSTOMER_ID;
+
+SELECT *
+FROM CUSTOMERPULSE_DB.APP.CUSTOMER_360_V
+WHERE CUSTOMER_ID = 'C1003';
+
+SELECT
+    CUSTOMER_ID,
+    FULL_NAME,
+    SEGMENT,
+    TOTAL_SPEND,
+    OPEN_COMPLAINTS,
+    DAYS_PAST_DUE,
+    LAST_CALL_SENTIMENT
+FROM CUSTOMERPULSE_DB.APP.CUSTOMER_360_V
+ORDER BY CUSTOMER_ID;

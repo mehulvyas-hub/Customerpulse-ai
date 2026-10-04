@@ -1,0 +1,18 @@
+definition_version: 2
+entities:
+  streamlit_app:
+    type: streamlit
+    main_file: streamlit_app.py
+    query_warehouse: COMPUTE_WH
+    compute_pool: SYSTEM_COMPUTE_POOL_CPU
+    artifacts:
+      - pyproject.toml
+      - streamlit_app.py
+      - .streamlit/config.toml
+    identifier:
+      database: CUSTOMERPULSE_DB
+      schema: APP
+      name: CUSTOMERPULSE_AI
+    title: CustomerPulse_AI
+    run_mode: SpcsOnly
+    execute_as: OWNER
